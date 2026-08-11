@@ -259,6 +259,8 @@ function showAnalysisPage() {
     if (!map) {
         initMap();
         initChart();
+    } else {
+        setTimeout(() => map.invalidateSize(), 100);
     }
 }
 
@@ -642,7 +644,14 @@ $('#fileInput').change(function (e) {
 
 // ===== GPX PARSING =====
 function parseGPXManual(xmlDoc) {
-    const trkpts = xmlDoc.getElementsByTagName("trkpt");
+    let trkpts = Array.from(xmlDoc.querySelectorAll("trkpt"));
+    if (trkpts.length === 0) {
+        trkpts = Array.from(xmlDoc.getElementsByTagName("trkpt"));
+    }
+    if (trkpts.length === 0) {
+        trkpts = Array.from(xmlDoc.getElementsByTagNameNS("*", "trkpt"));
+    }
+
     const points = [];
     let timeFound = false;
 
@@ -650,15 +659,28 @@ function parseGPXManual(xmlDoc) {
         const p = trkpts[i];
         const lat = parseFloat(p.getAttribute("lat"));
         const lon = parseFloat(p.getAttribute("lon"));
+
         let ele = 0;
-        const eleTag = p.getElementsByTagName("ele");
-        if (eleTag.length > 0) ele = parseFloat(eleTag[0].textContent);
+        // Direct child lookup for robust element parsing regardless of namespace
+        for (let j = 0; j < p.childNodes.length; j++) {
+            const child = p.childNodes[j];
+            const nodeName = (child.localName || child.nodeName || "").toLowerCase();
+            if (nodeName === "ele" || nodeName.endsWith(":ele")) {
+                const parsedEle = parseFloat(child.textContent);
+                if (!isNaN(parsedEle)) ele = parsedEle;
+                break;
+            }
+        }
 
         let timeStr = null;
-        const timeTag = p.getElementsByTagName("time");
-        if (timeTag.length > 0) {
-            timeStr = timeTag[0].textContent;
-            timeFound = true;
+        for (let j = 0; j < p.childNodes.length; j++) {
+            const child = p.childNodes[j];
+            const nodeName = (child.localName || child.nodeName || "").toLowerCase();
+            if (nodeName === "time" || nodeName.endsWith(":time")) {
+                timeStr = child.textContent;
+                timeFound = true;
+                break;
+            }
         }
 
         points.push({
@@ -673,7 +695,7 @@ function parseGPXManual(xmlDoc) {
     updateDebug(`
         ${t('debug_xml_points')}${points.length}<br>
         ${t('debug_found_time')}${timeFound ? t('debug_yes') : t('debug_no')}<br>
-        ${t('debug_first_point')}Lat=${points[0]?.lat?.toFixed(4)}, Time=${points[0]?.timeStr || t('debug_none')}
+        ${t('debug_first_point')}Lat=${points[0]?.lat?.toFixed(4)}, Ele=${points[0]?.ele?.toFixed(1)}m, Time=${points[0]?.timeStr || t('debug_none')}
     `);
 
     return points;
@@ -1582,6 +1604,7 @@ function initDetailMap(run) {
         L.marker([run.finishPoint.lat, run.finishPoint.lng], { icon: finishIcon }).bindPopup(finishPopupContent).addTo(detailMarkersGroup);
     }
 
+    detailMap.invalidateSize();
     detailMap.fitBounds(detailLayer.getBounds(), { padding: [40, 40] });
 }
 
