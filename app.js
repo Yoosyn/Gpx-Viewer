@@ -235,6 +235,7 @@ let map;
 let chart;
 let loadedFiles = [];
 let hoverMarker;
+let detailHoverMarker;
 let gateState = {
     mode: 'idle', // idle, drawing_start, drawing_finish
     startPoints: [],
@@ -312,6 +313,66 @@ const verticalLinePlugin = {
         }
     }
 };
+
+// ===== DETAIL CHART HOVER PLUGIN =====
+const detailChartHoverPlugin = {
+    id: 'detailChartHover',
+    afterDraw: (chart) => {
+        if (!chart.tooltip) return;
+        if (!chart.tooltip._active || chart.tooltip._active.length === 0) {
+            if (detailHoverMarker) {
+                detailMarkersGroup.removeLayer(detailHoverMarker);
+                detailHoverMarker = null;
+            }
+            return;
+        }
+        if (!chart.scales || !chart.scales.y) return;
+
+        const ctx = chart.ctx;
+        ctx.save();
+
+        const activePoint = chart.tooltip._active[0];
+        const x = activePoint.element.x;
+
+        ctx.beginPath();
+        ctx.moveTo(x, chart.scales.y.top);
+        ctx.lineTo(x, chart.scales.y.bottom);
+        ctx.lineWidth = 1;
+        ctx.strokeStyle = '#6366f1';
+        ctx.setLineDash([5, 5]);
+        ctx.stroke();
+        ctx.restore();
+
+        showDetailPointOnMap(activePoint.index);
+    },
+    afterUpdate: (chart) => {
+        if (!chart.tooltip || !chart.tooltip._active || chart.tooltip._active.length === 0) {
+            if (detailHoverMarker) {
+                detailMarkersGroup.removeLayer(detailHoverMarker);
+                detailHoverMarker = null;
+            }
+        }
+    }
+};
+
+function showDetailPointOnMap(idx) {
+    if (!currentRun || !currentRun.points || !currentRun.points[idx]) return;
+    const pt = currentRun.points[idx];
+    const latlng = [pt.lat, pt.lng];
+
+    if (!detailHoverMarker) {
+        detailHoverMarker = L.circleMarker(latlng, {
+            radius: 8,
+            fillColor: '#ff0000',
+            color: '#fff',
+            weight: 2,
+            opacity: 1,
+            fillOpacity: 0.9
+        }).addTo(detailMarkersGroup);
+    } else {
+        detailHoverMarker.setLatLng(latlng);
+    }
+}
 
 // ===== INITIALIZATION =====
 $(document).ready(function () {
@@ -1730,7 +1791,7 @@ function renderDetailChart(run) {
                 }
             }
         },
-        plugins: [selectionPlugin]
+        plugins: [selectionPlugin, detailChartHoverPlugin]
     });
 }
 
