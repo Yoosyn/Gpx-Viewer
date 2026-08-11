@@ -21,7 +21,11 @@
 
 ## 🚀 Live Demo & Getting Started
 
-### Running Locally
+### 🌐 Online Demo
+Access the live web application here:  
+👉 **[https://yoosyn.github.io/Gpx-Viewer/](https://yoosyn.github.io/Gpx-Viewer/)**
+
+### 💻 Running Locally
 
 Since GPX Analyzer is a client-side application built with pure HTML, CSS, and Vanilla JavaScript, no build step or node package manager is required.
 
