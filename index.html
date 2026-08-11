@@ -1,0 +1,273 @@
+<!DOCTYPE html>
+<html lang="pl">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title data-i18n="page_title">GPX Analyzer - Profesjonalna Analiza Tras</title>
+    <meta name="description" data-i18n-attr="content:page_desc"
+        content="Zaawansowana analiza tras GPX z wizualizacją map, wykresów i statystyk dla narciarstwa, kolarstwa i biegania">
+
+    <!-- External Libraries -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <link rel="stylesheet" href="styles.css">
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/togeojson/0.16.0/togeojson.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/hammer.js/2.0.8/hammer.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/chartjs-plugin-zoom/2.0.1/chartjs-plugin-zoom.min.js"></script>
+</head>
+
+<body>
+    <!-- HOME PAGE -->
+    <div id="homePage" class="home-page">
+        <div class="home-background">
+            <img src="nart.jpg" alt="Mountain skiing background">
+        </div>
+        <div class="home-content">
+            <h1 data-i18n="home_title">GPX Analyzer</h1>
+            <p data-i18n="home_subtitle">Profesjonalna analiza tras narciarskich, rowerowych i biegowych</p>
+
+            <div class="glass-panel">
+                <div class="upload-section">
+                    <input type="file" id="fileInput" accept=".gpx" multiple style="display: none;">
+                    <button class="btn-primary" onclick="document.getElementById('fileInput').click()">
+                        <span data-i18n="btn_load_gpx">📁 Wczytaj Pliki GPX</span>
+                    </button>
+                </div>
+
+                <div class="activity-selector">
+                    <label for="activityType" data-i18n="activity_label">Wybierz rodzaj aktywności:</label>
+                    <select id="activityType">
+                        <option value="default" data-i18n="activity_default">🚴 Rower / Bieg</option>
+                        <option value="ski" data-i18n="activity_ski">⛷️ Narciarstwo (Detekcja Zjazdów)</option>
+                    </select>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ANALYSIS PAGE -->
+    <div id="analysisPage" class="analysis-page hidden">
+        <nav class="navbar">
+            <h2 data-i18n="nav_analysis_title">📊 Analiza GPX</h2>
+            <div class="nav-actions">
+                <button class="btn-secondary" onclick="showHomePage()" data-i18n="nav_home">🏠 Strona Główna</button>
+                <button class="btn-secondary" onclick="showDescentAnalysisPage()" data-i18n="nav_ski_analysis">⛷️ Analiza Zjazdów</button>
+                <button class="btn-secondary" onclick="document.getElementById('fileInput').click()" data-i18n="nav_add_file">➕ Dodaj Plik</button>
+            </div>
+        </nav>
+
+        <div class="analysis-container">
+            <!-- Compact Sidebar -->
+            <aside class="sidebar-compact">
+                <div class="debug-panel">
+                    <h5 data-i18n="debug_title">DEBUG INFO</h5>
+                    <div id="debug-content" data-i18n="debug_no_data">Brak danych...</div>
+                </div>
+
+                <div id="ski-stats" class="ski-stats hidden">
+                    <strong data-i18n="ski_detected_runs">⛷️ Wykryte zjazdy:</strong> <span id="run-count">0</span>
+                </div>
+
+                <div id="ski-settings-panel" class="ski-settings-panel hidden">
+                    <div class="settings-header">
+                        <h5 data-i18n="settings_title">⚙️ Ustawienia Detekcji</h5>
+                        <button id="btn-reset-settings" class="btn-icon-small" title="Resetuj ustawienia" onclick="resetSkiSettings()">🔄</button>
+                    </div>
+                    <div class="setting-item">
+                        <label>
+                            <span data-i18n="setting_min_drop">Min. Spadek:</span>
+                            <span id="val-min-drop" class="setting-val">20 m</span>
+                        </label>
+                        <input type="range" id="slider-min-drop" min="10" max="100" step="5" value="20">
+                    </div>
+                    <div class="setting-item">
+                        <label>
+                            <span data-i18n="setting_min_speed">Min. Prędkość:</span>
+                            <span id="val-min-speed" class="setting-val">10 km/h</span>
+                        </label>
+                        <input type="range" id="slider-min-speed" min="5" max="35" step="1" value="10">
+                    </div>
+                    <div class="setting-item">
+                        <label>
+                            <span data-i18n="setting_min_slope">Min. Nachylenie:</span>
+                            <span id="val-min-slope" class="setting-val">3 %</span>
+                        </label>
+                        <input type="range" id="slider-min-slope" min="0" max="15" step="1" value="3">
+                    </div>
+                    <div class="setting-item">
+                        <label>
+                            <span data-i18n="setting_smooth">Wygładzanie GPS:</span>
+                            <span id="val-smooth" class="setting-val">7 pkt</span>
+                        </label>
+                        <input type="range" id="slider-smooth" min="3" max="15" step="2" value="7">
+                    </div>
+                    <div class="setting-item checkbox-item">
+                        <label for="chk-merge-pauses" data-i18n="setting_merge_pauses">Łączenie Mikropauz</label>
+                        <input type="checkbox" id="chk-merge-pauses" checked>
+                    </div>
+                    <div class="setting-item" id="container-max-pause">
+                        <label>
+                            <span data-i18n="setting_max_pause">Max Czas Pauzy:</span>
+                            <span id="val-max-pause" class="setting-val">30 s</span>
+                        </label>
+                        <input type="range" id="slider-max-pause" min="10" max="90" step="5" value="30">
+                    </div>
+                </div>
+
+                <div>
+                    <h4 data-i18n="files_title">Pliki GPX</h4>
+                    <div id="file-list" class="file-list-compact"></div>
+                </div>
+            </aside>
+
+            <!-- Main Content Area -->
+            <main class="main-content">
+                <div class="map-container">
+                    <div id="map"></div>
+
+                    <div class="map-controls">
+                        <button id="btn-draw-start" class="btn-control" onclick="startDrawing('start')" data-i18n="draw_start">🚩 Rysuj Start</button>
+                        <button id="btn-draw-finish" class="btn-control" onclick="startDrawing('finish')" data-i18n="draw_finish">🏁 Rysuj Metę</button>
+                        <button id="btn-clear-gates" class="btn-control hidden" onclick="clearGates()" data-i18n="clear_gates">❌ Usuń Linie</button>
+                    </div>
+
+                    <div class="map-legend">
+                        <h5 data-i18n="speed_label">Prędkość (km/h)</h5>
+                        <div class="legend-gradient"></div>
+                        <div class="legend-labels">
+                            <span>0</span>
+                            <span>25</span>
+                            <span>50</span>
+                            <span>80+</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="chart-container">
+                    <canvas id="myChart"></canvas>
+                </div>
+            </main>
+        </div>
+    </div>
+
+    <!-- DESCENT ANALYSIS PAGE -->
+    <div id="descentAnalysisPage" class="analysis-page hidden">
+        <nav class="navbar">
+            <h2 data-i18n="nav_ski_analysis">⛷️ Analiza Zjazdów</h2>
+            <div class="nav-actions">
+                <button class="btn-secondary" onclick="showAnalysisPage()" data-i18n="btn_back_to_map">📊 Powrót do Mapy</button>
+            </div>
+        </nav>
+
+        <div class="analysis-container">
+            <main class="main-content full-width">
+                <div class="chart-container large-chart">
+                    <h3 data-i18n="comparison_title">Porównanie Prędkości Zjazdów</h3>
+                    <canvas id="descentChart"></canvas>
+                </div>
+
+                <div class="descents-list-container">
+                    <h3 data-i18n="detected_sections">Wykryte Odcinki</h3>
+                    <div id="descents-list" class="descents-grid">
+                        <!-- Zjazdy będą tutaj generowane dynamicznie -->
+                    </div>
+                </div>
+            </main>
+        </div>
+    </div>
+
+    <!-- DESCENT DETAIL PAGE -->
+    <div id="descentDetailPage" class="analysis-page hidden">
+        <nav class="navbar">
+            <h2 data-i18n="detail_title">📉 Szczegóły Zjazdu</h2>
+            <div class="nav-actions">
+                <button class="btn-secondary" onclick="showDescentAnalysisPage()" data-i18n="btn_back_to_list">🔙 Wróć do Listy</button>
+            </div>
+        </nav>
+
+        <div class="analysis-container detail-view-container">
+            <!-- Left: Map -->
+            <div class="half-width map-panel">
+                <div id="descentMap" class="detail-map"></div>
+            </div>
+
+            <!-- Right: Stats & Chart -->
+            <div class="half-width active-panel">
+                <div class="stats-cards-container">
+                    <div class="stat-card">
+                        <span class="label" data-i18n="stat_distance">Dystans</span>
+                        <span class="value" id="detail-dist">-</span>
+                    </div>
+                    <div class="stat-card">
+                        <span class="label" data-i18n="stat_drop">Spadek</span>
+                        <span class="value" id="detail-drop">-</span>
+                    </div>
+                    <div class="stat-card">
+                        <span class="label" data-i18n="stat_time">Czas</span>
+                        <span class="value" id="detail-time">-</span>
+                    </div>
+                    <div class="stat-card">
+                        <span class="label" data-i18n="stat_avg_speed">Śr. Prędkość</span>
+                        <span class="value" id="detail-speed">-</span>
+                    </div>
+                    <div class="stat-card">
+                        <span class="label" data-i18n="stat_max_speed">Max Prędkość</span>
+                        <span class="value" id="detail-max-speed">-</span>
+                    </div>
+                    <div class="stat-card highlight-start">
+                        <span class="label" data-i18n="stat_start_ele">🚩 Wys. Startu</span>
+                        <span class="value" id="detail-start-ele">-</span>
+                    </div>
+                    <div class="stat-card highlight-finish">
+                        <span class="label" data-i18n="stat_finish_ele">🏁 Wys. Mety</span>
+                        <span class="value" id="detail-finish-ele">-</span>
+                    </div>
+                    <div class="stat-card highlight-start">
+                        <span class="label" data-i18n="stat_start_time">⏱️ Czas Startu</span>
+                        <span class="value" id="detail-start-time">-</span>
+                    </div>
+                    <div class="stat-card highlight-finish">
+                        <span class="label" data-i18n="stat_finish_time">⏱️ Czas Mety</span>
+                        <span class="value" id="detail-finish-time">-</span>
+                    </div>
+                </div>
+
+                <div class="selection-stats hidden" id="selection-stats">
+                    <h5 data-i18n="selection_title">🔍 Zaznaczony Fragment</h5>
+                    <div class="selection-grid">
+                        <div>
+                            <span data-i18n="stat_drop">Spadek</span>
+                            <strong id="sel-drop">-</strong>
+                        </div>
+                        <div>
+                            <span data-i18n="stat_distance">Dystans</span>
+                            <strong id="sel-dist">-</strong>
+                        </div>
+                        <div>
+                            <span data-i18n="stat_slope">Nachylenie</span>
+                            <strong id="sel-slope">-</strong>
+                        </div>
+                        <div>
+                            <span data-i18n="stat_avg_speed">Śr. Prędkość</span>
+                            <strong id="sel-speed">-</strong>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="detail-chart-wrapper">
+                    <canvas id="descentDetailChart"></canvas>
+                    <div class="chart-instructions" data-i18n="chart_instructions">
+                        💡 Zaznacz fragment na wykresie, aby zobaczyć szczegóły
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+
+</html>

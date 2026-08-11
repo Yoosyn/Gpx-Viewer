@@ -1,0 +1,13 @@
+# Pliki danych i testowe GPX
+*.gpx
+
+# Pliki tymczasowe i kopie
+* — kopia.*
+*.tmp
+*.log
+
+# Pliki środowiskowe / IDE / OS
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
